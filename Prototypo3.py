@@ -7,18 +7,16 @@ import os
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
+import random
 
-# Función segura para convertir valores a entero
 def safe_int(value):
     try:
         return int(float(value))
     except:
         return 0
 
-# 1. Cargar hoja de cálculo con estadísticas globales (Filtrado de imágenes.xlsx)
+# 1. Cargar estadísticas globales (Filtrado de imágenes.xlsx)
 df_stats = pd.read_excel("Filtrado de imágenes.xlsx")
-
-# Buscar la fila que contiene "Femur"
 mask_femur = df_stats.astype(str).apply(lambda row: row.str.contains("Femur", case=False, na=False).any(), axis=1)
 idx_femur = df_stats.index[mask_femur].tolist()
 
@@ -28,21 +26,31 @@ if idx_femur:
     df_femur_stats = df_femur_stats.iloc[:, :5]
     df_femur_stats.columns = ["Grupo", "Tumor", "Benign", "Malignant", "No tumor"]
 
-# 2. Cargar dataset global (para validar benigno/maligno por imagen)
+# 2. Cargar dataset global
 df_meta = pd.read_excel("dataset.xlsx")
 
 # Carpeta de imágenes ya filtradas del fémur
 img_path = "femur_images/"
 
-# 3. Seleccionar una imagen de cada tipo
-benigno_row = df_meta[(df_meta['femur'] == 1) & (df_meta['benign'] == 1)].head(1)
-maligno_row = df_meta[(df_meta['femur'] == 1) & (df_meta['malignant'] == 1)].head(1)
-sin_tumor_row = df_meta[(df_meta['femur'] == 1) & (df_meta['tumor'] == 0)].head(1)
+# 3. Seleccionar una imagen aleatoria de cada tipo
+def seleccionar_random(df, filtro, nombre):
+    subset = df[(df['femur'] == 1) & filtro]
+    if not subset.empty:
+        return subset.sample(1)  # selecciona aleatoriamente una fila
+    else:
+        print(f"⚠ No se encontró imagen para el caso: {nombre}")
+        return pd.DataFrame()
+
+benigno_row = seleccionar_random(df_meta, (df_meta['benign'] == 1), "Tumor benigno")
+maligno_row = seleccionar_random(df_meta, (df_meta['malignant'] == 1), "Tumor maligno")
+sin_tumor_row = seleccionar_random(df_meta, (df_meta['tumor'] == 0), "Sin tumor")
+osteosarcoma_row = seleccionar_random(df_meta, (df_meta['osteosarcoma'] == 1), "Osteosarcoma")
 
 imagenes = [
     ("Tumor benigno", benigno_row),
     ("Tumor maligno", maligno_row),
-    ("Sin tumor", sin_tumor_row)
+    ("Sin tumor", sin_tumor_row),
+    ("Osteosarcoma", osteosarcoma_row)
 ]
 
 # 4. Función para aplicar Sobel y mostrar resultados
@@ -53,7 +61,6 @@ def aplicar_sobel(img_file, diagnostico):
         print(f"⚠ No se pudo cargar la imagen: {img_file}")
         return
 
-    # Mostrar imagen original
     plt.imshow(img, cmap='gray')
     plt.title(f"Imagen del fémur ({diagnostico}): {img_file}")
     plt.axis('off')
@@ -92,8 +99,6 @@ for diagnostico, row in imagenes:
         img_file = row['image_id'].values[0]
         print(f"\n✅ Procesando imagen {img_file} ({diagnostico})")
         aplicar_sobel(img_file, diagnostico)
-    else:
-        print(f"⚠ No se encontró imagen para el caso: {diagnostico}")
 
 # 6. Mostrar estadísticas globales del fémur
 mujeres_row = df_femur_stats[df_femur_stats["Grupo"].astype(str).str.contains("Mujeres", case=False, na=False)]
